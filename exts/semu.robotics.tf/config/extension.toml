@@ -1,0 +1,36 @@
+[core]
+reloadable = true
+order = 0
+
+[package]
+version = "0.0.1"
+category = "Simulation"
+feature = false
+app = false
+title = "TF Viewer"
+description = "Show the tf transform tree"
+authors = ["Toni-SM"]
+repository = "https://github.com/Toni-SM/semu.robotics.tf"
+keywords = ["ROS", "ROS2", "tf", "transformation"]
+changelog = "docs/CHANGELOG.md"
+readme = "docs/README.md"
+preview_image = "data/preview.png"
+icon = "data/icon.png"
+
+[package.target]
+config = ["release"]
+platform = ["linux-*"]
+python = ["*"]
+
+[dependencies]
+"omni.kit.test" = {}
+"omni.kit.uiapp" = {}
+"omni.ui.scene" = {}
+"omni.kit.viewport.utility" = {}
+
+[[python.module]]
+name = "semu.robotics.tf"
+
+[python.pipapi]
+requirements = ["numpy", "scipy"]
+use_online_index = true
