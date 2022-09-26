@@ -79,8 +79,13 @@ class ViewManipulator(sc.Manipulator):
     def set_arrows_thickness(self, value: float) -> None:
         self.cfg_arrows_thickness = value * 20
 
+    def clear(self):
+        self._relations = []
+        self._transforms = {}
+
     def on_build(self):
         if not self._transforms:
+            self.invalidate()
             return
 
         transforms = copy.deepcopy(self._transforms)
