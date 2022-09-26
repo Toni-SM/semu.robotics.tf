@@ -33,8 +33,10 @@ class Extension(omni.ext.IExt):
         self._window = None
         self._running = False
         self._tf_listener = None
-        self._frames = ["world", "map"]
-        self._root_frame = self._frames[0]
+
+        self._frames = set(["world", "map"])
+        self._root_frame = "world"
+        self._update_frequency = 20
 
     def on_shutdown(self):
         self._running = False
@@ -59,6 +61,21 @@ class Extension(omni.ext.IExt):
         self._build_ui()
         self._window.visible = not self._window.visible
 
+    def _update_frames(self, frames):
+        previous_len = len(self._frames)
+        self._frames.update(frames)
+        # update ui
+        if previous_len != len(self._frames):
+            frames = sorted(self._frames)
+            # root frame
+            root_frame = self._root_frame
+            for item in self._ui_root_frame_combo_box.get_item_children():
+                self._ui_root_frame_combo_box.remove_item(item)
+            for frame in frames:
+                self._ui_root_frame_combo_box.append_child_item(None, ui.SimpleStringModel(frame))
+            self._ui_root_frame_combo_box.get_item_value_model().set_value(frames.index(root_frame))
+            self._root_frame = root_frame
+
     def _on_window(self, status):
         if status:
             carb.log_info("Acquiring TF listener...")
@@ -80,8 +97,13 @@ class Extension(omni.ext.IExt):
     def _update_transform_thread(self, *args, **kwargs):
         self._running = True
         while self._running:
-            self._viewport_scene.manipulator.update_transforms(*self._tf_listener.get_transforms(self._root_frame))
-            time.sleep(0.05)
+            # get transforms
+            transforms, relations = self._tf_listener.get_transforms(self._root_frame)
+            # update frames
+            self._update_frames(list(transforms.keys()))
+            # draw scene
+            self._viewport_scene.manipulator.update_transforms(transforms, relations)
+            time.sleep(1 / self._update_frequency)
         # clear scene
         if self._viewport_scene:
             self._viewport_scene.manipulator.clear()
@@ -91,10 +113,18 @@ class Extension(omni.ext.IExt):
             self._tf_listener.reset()
 
     def _on_root_frame_changed(self, model, item):
-        if item is None:
+        try:
             selected_index = model.get_item_value_model().get_value_as_int()
             item = model.get_item_value_model(model.get_item_children()[selected_index])
             self._root_frame = item.get_value_as_string()
+        except Exception as e:
+            pass
+
+    def _on_update_frequency_changed(self, model):
+        frequency = model.as_int
+        if frequency <= 0:
+            frequency = 20
+        self._update_frequency = frequency
 
     def _build_ui(self):
         if not self._window:
@@ -119,7 +149,7 @@ class Extension(omni.ext.IExt):
                         with ui.VStack(spacing=5, height=0):
                             
                             with ui.HStack():
-                                items = self._frames
+                                items = sorted(self._frames)
                                 tooltip = "Frame on which to compute the transormations"
                                 ui.Label("Root Frame:", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
                                 self._ui_root_frame_combo_box = ui.ComboBox(0, *items, name="", width=ui.Fraction(1), 
@@ -129,7 +159,7 @@ class Extension(omni.ext.IExt):
 
                             # frames
                             with ui.HStack():
-                                tooltip = "Whether the frames are displayed"
+                                tooltip = "Whether the frames (markers) are displayed"
                                 ui.Label("Show Frames:", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
                                 # show frames
                                 self._ui_show_frames_checkbox = ui.SimpleBoolModel()
@@ -224,19 +254,20 @@ class Extension(omni.ext.IExt):
                                 add_line_rect_flourish()
 
                             with ui.HStack():
-                                tooltip = "The interval, in seconds, at which to update the frame transforms. 0 means to do so every update cycle"
-                                ui.Label("Update Interval:", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
-                                self._ui_update_interval = ui.IntDrag(name="", height=LABEL_HEIGHT, min=0, max=60, 
-                                                                    alignment=ui.Alignment.LEFT_CENTER, tooltip="Seconds").model
-                                self._ui_update_interval.set_value(0)
+                                tooltip = "Frame transformation update frequency. 0 means to do so every update cycle"
+                                ui.Label("Update Frequency (Hz):", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
+                                self._ui_update_interval = ui.IntDrag(height=LABEL_HEIGHT, min=1, max=60, alignment=ui.Alignment.LEFT_CENTER, 
+                                                                      tooltip="Frequency (Hz)").model
+                                self._ui_update_interval.add_value_changed_fn(self._on_update_frequency_changed)
+                                self._ui_update_interval.set_value(20)
                                 ui.Spacer(width=5)
                                 add_line_rect_flourish()
 
                             with ui.HStack():
                                 tooltip = "The length of time, in seconds, before a frame that has not been updated is considered 'dead'"
                                 ui.Label("Frame Timeout:", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
-                                self._ui_frame_timeout = ui.IntDrag(name="", height=LABEL_HEIGHT, min=1, max=60, 
-                                                                    alignment=ui.Alignment.LEFT_CENTER, tooltip="Seconds").model
+                                self._ui_frame_timeout = ui.IntDrag(height=LABEL_HEIGHT, min=1, max=60, alignment=ui.Alignment.LEFT_CENTER, 
+                                                                    tooltip="Seconds").model
                                 self._ui_frame_timeout.set_value(15)
                                 ui.Spacer(width=5)
                                 add_line_rect_flourish()
@@ -247,7 +278,8 @@ class Extension(omni.ext.IExt):
                                                 width=LABEL_WIDTH / 2,
                                                 clicked_fn=self._on_reset,
                                                 style=get_style(),
-                                                alignment=ui.Alignment.LEFT_CENTER)
+                                                alignment=ui.Alignment.LEFT_CENTER,
+                                                tooltip="Reset transformation tree")
                                 ui.Spacer(width=5)
                                 add_line_rect_flourish(True)
 
@@ -262,7 +294,7 @@ class Extension(omni.ext.IExt):
                         with ui.VStack(spacing=5, height=0):
                             
                             with ui.HStack():
-                                items = self._frames
+                                items = sorted(self._frames)
                                 tooltip = "Calculate the distance between two frames according to the transformation tree"
                                 ui.Label("Frame A:", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
                                 self._ui_distance_combo_box_1 = ui.ComboBox(0, *items, name="", width=ui.Fraction(1), 
@@ -270,7 +302,7 @@ class Extension(omni.ext.IExt):
                                 add_line_rect_flourish(False)
 
                             with ui.HStack():
-                                items = self._frames
+                                items = sorted(self._frames)
                                 tooltip = "Calculate the distance between two frames according to the transformation tree"
                                 ui.Label("Frame B:", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
                                 self._ui_distance_combo_box_1 = ui.ComboBox(0, *items, name="", width=ui.Fraction(1), 
