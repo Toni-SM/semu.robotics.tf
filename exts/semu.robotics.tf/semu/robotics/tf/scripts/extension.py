@@ -1,3 +1,6 @@
+import time
+import threading
+
 import omni
 import carb
 import omni.ext
@@ -7,6 +10,7 @@ from omni.kit.viewport.utility import get_active_viewport_window
 from omni.isaac.ui.ui_utils import add_line_rect_flourish, get_style, SimpleCheckBox, LABEL_WIDTH, LABEL_HEIGHT
 
 from .viewport_scene import ViewportScene
+from . import ros_tf_listener as _ros_tf_listener
 
 
 class Extension(omni.ext.IExt):
@@ -15,7 +19,6 @@ class Extension(omni.ext.IExt):
     MENU_PATH = f"Window/{WINDOW_NAME}"
 
     def on_startup(self, ext_id):
-
         # get extension settings
         self._settings = carb.settings.get_settings()
 
@@ -24,20 +27,20 @@ class Extension(omni.ext.IExt):
         if self._editor_menu:
             self._menu = self._editor_menu.add_item(Extension.MENU_PATH, self._menu_callback, toggle=True, value=False)
 
-        # stage units
-        stage = omni.usd.get_context().get_stage()
-        self._stage_unit = UsdGeom.GetStageMetersPerUnit(stage)
-
         self._viewport_window = get_active_viewport_window()
         self._viewport_scene = ViewportScene(self._viewport_window, ext_id)
 
         self._window = None
-        self._build_ui()
+        self._running = False
+        self._tf_listener = None
+        self._frames = ["world", "map"]
+        self._root_frame = self._frames[0]
 
-        
     def on_shutdown(self):
+        self._running = False
         # destroy scene
         if self._viewport_scene:
+            self._viewport_scene.manipulator.clear()
             self._viewport_scene.destroy()
             self._viewport_scene = None
         # clean up menu item
@@ -49,18 +52,59 @@ class Extension(omni.ext.IExt):
             self._menu = None
 
     def _menu_callback(self, *args, **kwargs):
+        # stage units
+        stage = omni.usd.get_context().get_stage()
+        self._stage_unit = UsdGeom.GetStageMetersPerUnit(stage)
+        # window
+        self._build_ui()
         self._window.visible = not self._window.visible
 
-    def _build_ui(self):
+    def _on_window(self, status):
+        if status:
+            carb.log_info("Acquiring TF listener...")
+            # acquire listener
+            self._tf_listener = _ros_tf_listener.acquire_ros_tf_listener_interface(use_tf2=True)
+            threading.Thread(target=self._update_transform_thread).start()
+            carb.log_info("TF listener status: {}".format(self._tf_listener.is_ready()))
+        else:
+            carb.log_info("Releasing TF listener...")
+            self._running = False
+            # release listener
+            _ros_tf_listener.release_ros_tf_listener_interface(self._tf_listener)
+            self._tf_listener = None
+            # clear scene
+            if self._viewport_scene:
+                self._viewport_scene.manipulator.clear()
+            carb.log_info("TF listener released")
 
+    def _update_transform_thread(self, *args, **kwargs):
+        self._running = True
+        while self._running:
+            self._viewport_scene.manipulator.update_transforms(*self._tf_listener.get_transforms(self._root_frame))
+            time.sleep(0.05)
+        # clear scene
+        if self._viewport_scene:
+            self._viewport_scene.manipulator.clear()
+
+    def _on_reset(self):
+        if self._tf_listener:
+            self._tf_listener.reset()
+
+    def _on_root_frame_changed(self, model, item):
+        if item is None:
+            selected_index = model.get_item_value_model().get_value_as_int()
+            item = model.get_item_value_model(model.get_item_children()[selected_index])
+            self._root_frame = item.get_value_as_string()
+
+    def _build_ui(self):
         if not self._window:
             self._window = ui.Window(title=Extension.WINDOW_NAME, 
                                      width=0, 
                                      height=0, 
-                                     visible=True, 
+                                     visible=False, 
                                      dockPreference=ui.DockPreference.LEFT_BOTTOM)
-            # self._window.set_visibility_changed_fn(self._on_window)
-            
+            self._window.set_visibility_changed_fn(self._on_window)
+
             with self._window.frame:
                 with ui.VStack(spacing=5, height=0):
 
@@ -75,11 +119,12 @@ class Extension(omni.ext.IExt):
                         with ui.VStack(spacing=5, height=0):
                             
                             with ui.HStack():
-                                items = ["world", "map"]
+                                items = self._frames
                                 tooltip = "Frame on which to compute the transormations"
                                 ui.Label("Root Frame:", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
                                 self._ui_root_frame_combo_box = ui.ComboBox(0, *items, name="", width=ui.Fraction(1), 
                                                                             alignment=ui.Alignment.LEFT_CENTER).model
+                                self._ui_root_frame_combo_box.add_item_changed_fn(self._on_root_frame_changed)
                                 add_line_rect_flourish(False)
 
                             # frames
@@ -196,6 +241,16 @@ class Extension(omni.ext.IExt):
                                 ui.Spacer(width=5)
                                 add_line_rect_flourish()
 
+                            # reset tf
+                            with ui.HStack():
+                                btn = ui.Button("Reset",
+                                                width=LABEL_WIDTH / 2,
+                                                clicked_fn=self._on_reset,
+                                                style=get_style(),
+                                                alignment=ui.Alignment.LEFT_CENTER)
+                                ui.Spacer(width=5)
+                                add_line_rect_flourish(True)
+
                     self._tool = ui.CollapsableFrame(title="Measuring tool",
                                                      height=0,
                                                      collapsed=False,
@@ -207,7 +262,7 @@ class Extension(omni.ext.IExt):
                         with ui.VStack(spacing=5, height=0):
                             
                             with ui.HStack():
-                                items = ["", "world", "map"]
+                                items = self._frames
                                 tooltip = "Calculate the distance between two frames according to the transformation tree"
                                 ui.Label("Frame A:", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
                                 self._ui_distance_combo_box_1 = ui.ComboBox(0, *items, name="", width=ui.Fraction(1), 
@@ -215,7 +270,7 @@ class Extension(omni.ext.IExt):
                                 add_line_rect_flourish(False)
 
                             with ui.HStack():
-                                items = ["", "world", "map"]
+                                items = self._frames
                                 tooltip = "Calculate the distance between two frames according to the transformation tree"
                                 ui.Label("Frame B:", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
                                 self._ui_distance_combo_box_1 = ui.ComboBox(0, *items, name="", width=ui.Fraction(1), 
