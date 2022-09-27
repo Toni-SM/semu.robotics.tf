@@ -1,13 +1,14 @@
+import time
 import yaml
 
 import carb
 
 
-def acquire_ros_tf_listener_interface(use_tf2: bool = True):
+def acquire_tf_listener_interface(use_tf2: bool = True):
     interface = TFListener(use_tf2=use_tf2)
     return interface
 
-def release_ros_tf_listener_interface(interface):
+def release_tf_listener_interface(interface):
     interface.shutdown()
 
 
@@ -20,9 +21,6 @@ class TFListener:
 
         if not self._init_ros_node():
             return
-
-        import time
-        time.sleep(1)
 
         # tf2 implementation
         if self._use_tf2:
@@ -57,6 +55,7 @@ class TFListener:
         # start ROS node
         try:
             rospy.init_node(self._node_name)
+            time.sleep(0.1)
             carb.log_info("ROS node started ({})".format(self._node_name))
         except rospy.ROSException as e:
             carb.log_error("ROS node ({}): {}".format(self._node_name, e))
@@ -94,8 +93,9 @@ class TFListener:
         return transforms, relations
 
     def reset(self):
+        # remove "TF_OLD_DATA ignoring data from the past" warning
         if self._listener:
-            carb.log_info("Reset TF listener")
+            carb.log_info("Reset TF listener (ROS)")
             if self._use_tf2:
                 self._tf_buffer.clear()
             else:
