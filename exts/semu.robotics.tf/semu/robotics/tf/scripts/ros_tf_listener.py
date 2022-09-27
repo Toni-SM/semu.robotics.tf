@@ -92,6 +92,17 @@ class TFListener:
         
         return transforms, relations
 
+    def get_transform(self, target_frame, source_frame):
+        try:
+            transform = self._lookup_transform(target_frame, source_frame, self._time() if self._use_tf2 else self._time(target_frame, source_frame))
+        except Exception as e:
+            return (), type(e).__name__
+        if self._use_tf2:
+            translation = transform.transform.translation
+            rotation = transform.transform.rotation
+            transform = ([translation.x, translation.y, translation.z], [rotation.x, rotation.y, rotation.z, rotation.w])
+        return transform, ""
+
     def reset(self):
         # remove "TF_OLD_DATA ignoring data from the past" warning
         if self._listener:
