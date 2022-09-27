@@ -11,16 +11,18 @@ from omni.isaac.ui.ui_utils import add_line_rect_flourish, get_style, SimpleChec
 
 from .viewport_scene import ViewportScene
 from . import ros_tf_listener as _ros_tf_listener
+from . import ros2_tf_listener as _ros2_tf_listener
 
 
 class Extension(omni.ext.IExt):
     
     WINDOW_NAME = "TF Viewer"
-    MENU_PATH = f"Window/{WINDOW_NAME}"
+    MENU_PATH = f"Window/Robotics/{WINDOW_NAME}"
 
     def on_startup(self, ext_id):
-        # get extension settings
+        # get extension settings and manager
         self._settings = carb.settings.get_settings()
+        self._ext_manager = omni.kit.app.get_app().get_extension_manager()
 
         # menu item
         self._editor_menu = omni.kit.ui.get_editor_menu()
@@ -77,17 +79,33 @@ class Extension(omni.ext.IExt):
             self._root_frame = root_frame
 
     def _on_window(self, status):
+        version = ""
+        if self._ext_manager.is_extension_enabled("omni.isaac.ros_bridge"):
+            version = "ros"
+        elif self._ext_manager.is_extension_enabled("omni.isaac.ros2_bridge"):
+            version = "ros2"
+        else:
+            carb.log_warn("Neither extension 'omni.isaac.ros_bridge' nor 'omni.isaac.ros2_bridge' is enabled")
+
         if status:
-            carb.log_info("Acquiring TF listener...")
-            # acquire listener
-            self._tf_listener = _ros_tf_listener.acquire_ros_tf_listener_interface(use_tf2=True)
-            threading.Thread(target=self._update_transform_thread).start()
-            carb.log_info("TF listener status: {}".format(self._tf_listener.is_ready()))
+            if version:
+                carb.log_info("Acquiring TF listener ({})...".format(version.upper()))
+                # acquire listener
+                if version == "ros":
+                    self._tf_listener = _ros_tf_listener.acquire_tf_listener_interface(use_tf2=True)
+                elif version == "ros2":
+                    self._tf_listener = _ros2_tf_listener.acquire_tf_listener_interface()
+                # update thread
+                threading.Thread(target=self._update_transform_thread).start()
+                carb.log_info("TF listener status: {}".format(self._tf_listener.is_ready()))
         else:
             carb.log_info("Releasing TF listener...")
             self._running = False
             # release listener
-            _ros_tf_listener.release_ros_tf_listener_interface(self._tf_listener)
+            if version == "ros":
+                _ros_tf_listener.release_tf_listener_interface(self._tf_listener)
+            elif version == "ros2":
+                _ros2_tf_listener.release_tf_listener_interface(self._tf_listener)
             self._tf_listener = None
             # clear scene
             if self._viewport_scene:
