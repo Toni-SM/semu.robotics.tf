@@ -36,6 +36,8 @@ class ViewManipulator(sc.Manipulator):
     def update_transforms(self, transforms, relations):
         self._relations = relations
         self._transforms = transforms
+        # redraw all
+        self.invalidate()
 
     def set_root_frame(self, value):
         self.cfg_root_frame = value
@@ -80,12 +82,10 @@ class ViewManipulator(sc.Manipulator):
         self.cfg_arrows_thickness = value * 20
 
     def clear(self):
-        self._relations = []
-        self._transforms = {}
+        self.update_transforms({}, [])
 
     def on_build(self):
         if not self._transforms:
-            self.invalidate()
             return
 
         transforms = copy.deepcopy(self._transforms)
@@ -123,6 +123,3 @@ class ViewManipulator(sc.Manipulator):
                     sc.Line([0, 0, 0], [k, 0, 0], color=cl("#ff0000"), thickness=self.cfg_axes_thickness)
                     sc.Line([0, 0, 0], [0, k, 0], color=cl("#00ff00"), thickness=self.cfg_axes_thickness)
                     sc.Line([0, 0, 0], [0, 0, k], color=cl("#0000ff"), thickness=self.cfg_axes_thickness)
-
-        # redraw all
-        self.invalidate()
