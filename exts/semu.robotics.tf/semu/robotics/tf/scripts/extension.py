@@ -40,8 +40,8 @@ class Extension(omni.ext.IExt):
 
         self._frames = set(["world", "map"])
         self._root_frame = "world"
-        self._frame_a = "world"
-        self._frame_b = "world"
+        self._target_frame = "world"
+        self._source_frame = "world"
         self._update_frequency = 20
 
     def on_shutdown(self):
@@ -75,27 +75,27 @@ class Extension(omni.ext.IExt):
             frames = sorted(self._frames)
             # save frames
             root_frame = self._root_frame
-            frame_a = self._frame_a
-            frame_b = self._frame_b
+            target_frame = self._target_frame
+            source_frame = self._source_frame
             # clean combo boxes
             for item in self._ui_root_frame_combo_box.get_item_children():
                 self._ui_root_frame_combo_box.remove_item(item)
-            for item in self._ui_frame_a_combo_box.get_item_children():
-                self._ui_frame_a_combo_box.remove_item(item)
-            for item in self._ui_frame_b_combo_box.get_item_children():
-                self._ui_frame_b_combo_box.remove_item(item)
+            for item in self._ui_target_frame_combo_box.get_item_children():
+                self._ui_target_frame_combo_box.remove_item(item)
+            for item in self._ui_source_frame_combo_box.get_item_children():
+                self._ui_source_frame_combo_box.remove_item(item)
             # fill combo boxes
             for frame in frames:
                 self._ui_root_frame_combo_box.append_child_item(None, ui.SimpleStringModel(frame))
-                self._ui_frame_a_combo_box.append_child_item(None, ui.SimpleStringModel(frame))
-                self._ui_frame_b_combo_box.append_child_item(None, ui.SimpleStringModel(frame))
+                self._ui_target_frame_combo_box.append_child_item(None, ui.SimpleStringModel(frame))
+                self._ui_source_frame_combo_box.append_child_item(None, ui.SimpleStringModel(frame))
             # set active frames
             self._ui_root_frame_combo_box.get_item_value_model().set_value(frames.index(root_frame))
-            self._ui_frame_a_combo_box.get_item_value_model().set_value(frames.index(frame_a))
-            self._ui_frame_b_combo_box.get_item_value_model().set_value(frames.index(frame_b))
+            self._ui_target_frame_combo_box.get_item_value_model().set_value(frames.index(target_frame))
+            self._ui_source_frame_combo_box.get_item_value_model().set_value(frames.index(source_frame))
             self._root_frame = root_frame
-            self._frame_a = frame_a
-            self._frame_b = frame_b
+            self._target_frame = target_frame
+            self._source_frame = source_frame
 
     def _on_window(self, status):
         version = ""
@@ -135,13 +135,13 @@ class Extension(omni.ext.IExt):
         self._running = True
         while self._running:
             # compute distance
-            if self._frame_a != self._frame_b:
-                transform, error_name = self._tf_listener.get_transform(self._frame_a, self._frame_b)
+            if self._target_frame != self._source_frame:
+                transform, error_name = self._tf_listener.get_transform(self._target_frame, self._source_frame)
                 if error_name:
                     self._ui_label_distance.text = error_name
                     self._ui_label_rotation.text = error_name
                 else:
-                    rotation = Rotation.from_quat(transform[1]).as_euler("xyz", degrees=True)
+                    rotation = Rotation.from_quat(transform[1]).as_euler("zyx", degrees=True)
                     self._ui_label_distance.text = str(np.round(np.linalg.norm(transform[0]), 4))
                     self._ui_label_rotation.text = ",  ".join([str(angle) for angle in np.round(rotation, 2)])
             # get transforms
@@ -161,12 +161,12 @@ class Extension(omni.ext.IExt):
 
     def _on_clear_measurement(self):
         frames = sorted(self._frames)
-        self._ui_frame_a_combo_box.get_item_value_model().set_value(frames.index("world"))
-        self._ui_frame_b_combo_box.get_item_value_model().set_value(frames.index("world"))
+        self._ui_target_frame_combo_box.get_item_value_model().set_value(frames.index("world"))
+        self._ui_source_frame_combo_box.get_item_value_model().set_value(frames.index("world"))
         self._ui_label_distance.text = "-"
         self._ui_label_rotation.text = "-"
-        self._frame_a = "world"
-        self._frame_b = "world"
+        self._target_frame = "world"
+        self._source_frame = "world"
 
     def _on_frame_changed(self, frame_name, model, item):
         try:
@@ -176,12 +176,12 @@ class Extension(omni.ext.IExt):
             return
         if frame_name == "root":
             self._root_frame = value
-        elif frame_name == "a":
-            self._frame_a = value
-        elif frame_name == "b":
-            self._frame_b = value
+        elif frame_name == "target_frame":
+            self._target_frame = value
+        elif frame_name == "source_frame":
+            self._source_frame = value
         # set labels
-        if self._frame_a == self._frame_b:
+        if self._target_frame == self._source_frame:
             self._ui_label_distance.text = "-"
             self._ui_label_rotation.text = "-"
 
@@ -363,18 +363,18 @@ class Extension(omni.ext.IExt):
                                 items = sorted(self._frames)
                                 tooltip = "The frame to which data should be transformed"
                                 ui.Label("Target frame:", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
-                                self._ui_frame_a_combo_box = ui.ComboBox(1, *items, name="", width=ui.Fraction(1), 
-                                                                         alignment=ui.Alignment.LEFT_CENTER).model
-                                self._ui_frame_a_combo_box.add_item_changed_fn(lambda m, i: self._on_frame_changed("a", m, i))
+                                self._ui_target_frame_combo_box = ui.ComboBox(1, *items, name="", width=ui.Fraction(1), 
+                                                                              alignment=ui.Alignment.LEFT_CENTER).model
+                                self._ui_target_frame_combo_box.add_item_changed_fn(lambda m, i: self._on_frame_changed("target_frame", m, i))
                                 add_line_rect_flourish(False)
 
                             with ui.HStack():
                                 items = sorted(self._frames)
                                 tooltip = "The frame where the data originated"
                                 ui.Label("Source frame:", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
-                                self._ui_frame_b_combo_box = ui.ComboBox(1, *items, name="", width=ui.Fraction(1), 
-                                                                         alignment=ui.Alignment.LEFT_CENTER).model
-                                self._ui_frame_b_combo_box.add_item_changed_fn(lambda m, i: self._on_frame_changed("b", m, i))
+                                self._ui_source_frame_combo_box = ui.ComboBox(1, *items, name="", width=ui.Fraction(1), 
+                                                                              alignment=ui.Alignment.LEFT_CENTER).model
+                                self._ui_source_frame_combo_box.add_item_changed_fn(lambda m, i: self._on_frame_changed("source_frame", m, i))
                                 add_line_rect_flourish(False)
 
                             ui.Spacer(height=1)
@@ -388,12 +388,13 @@ class Extension(omni.ext.IExt):
                             ui.Spacer(height=1)
                             with ui.HStack():
                                 items = ["", "world", "map"]
-                                tooltip = "Rotation between the frames from the transformation tree"
-                                ui.Label("Rotation (degrees):", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
+                                tooltip = "Rotation between the frames from the transformation tree (Euler angles ZYX)"
+                                ui.Label("Euler angles ZYX (deg):", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
                                 self._ui_label_rotation = ui.Label("-", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT)
                                 add_line_rect_flourish()
 
                             # clear
+                            ui.Spacer()
                             with ui.HStack():
                                 btn = ui.Button("Clear",
                                                 width=LABEL_WIDTH / 2,
