@@ -1,7 +1,7 @@
 import time
 import threading
 import numpy as np
-from scipy.spatial.transform import Rotation, rotation
+from scipy.spatial.transform import Rotation
 
 import omni
 import carb
@@ -159,6 +159,15 @@ class Extension(omni.ext.IExt):
         if self._tf_listener:
             self._tf_listener.reset()
 
+    def _on_clear_measurement(self):
+        frames = sorted(self._frames)
+        self._ui_frame_a_combo_box.get_item_value_model().set_value(frames.index("world"))
+        self._ui_frame_b_combo_box.get_item_value_model().set_value(frames.index("world"))
+        self._ui_label_distance.text = "-"
+        self._ui_label_rotation.text = "-"
+        self._frame_a = "world"
+        self._frame_b = "world"
+
     def _on_frame_changed(self, frame_name, model, item):
         try:
             selected_index = model.get_item_value_model().get_value_as_int()
@@ -273,7 +282,7 @@ class Extension(omni.ext.IExt):
                                 # axes length
                                 ui.Spacer(width=2)
                                 self._ui_show_axes_length = ui.FloatDrag(height=LABEL_HEIGHT, min=0, max=1, alignment=ui.Alignment.LEFT_CENTER,
-                                                                         tooltip="Axis length (meters)").model
+                                                                         tooltip="Axis length (in meters)").model
                                 self._ui_show_axes_length.add_value_changed_fn(lambda m: self._viewport_scene.manipulator.set_axes_length(m.as_float / self._stage_unit))
                                 self._ui_show_axes_length.set_value(0.15)
                                 # axes thickness
@@ -309,24 +318,25 @@ class Extension(omni.ext.IExt):
                                 ui.Spacer(width=5)
                                 add_line_rect_flourish()
 
+                            # update frequency
                             with ui.HStack():
-                                tooltip = "Frame transformation update frequency. 0 means to do so every update cycle"
-                                ui.Label("Update Frequency (Hz):", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
+                                tooltip = "Frame transformation update frequency (Hz). Higher frequency may reduce simulation performance"
+                                ui.Label("Update Frequency:", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
                                 self._ui_update_interval = ui.IntDrag(height=LABEL_HEIGHT, min=1, max=60, alignment=ui.Alignment.LEFT_CENTER, 
                                                                       tooltip="Frequency (Hz)").model
                                 self._ui_update_interval.add_value_changed_fn(self._on_update_frequency_changed)
-                                self._ui_update_interval.set_value(20)
+                                self._ui_update_interval.set_value(10)
                                 ui.Spacer(width=5)
                                 add_line_rect_flourish()
 
-                            with ui.HStack():
-                                tooltip = "The length of time, in seconds, before a frame that has not been updated is considered 'dead'"
-                                ui.Label("Frame Timeout:", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
-                                self._ui_frame_timeout = ui.IntDrag(height=LABEL_HEIGHT, min=1, max=60, alignment=ui.Alignment.LEFT_CENTER, 
-                                                                    tooltip="Seconds").model
-                                self._ui_frame_timeout.set_value(15)
-                                ui.Spacer(width=5)
-                                add_line_rect_flourish()
+                            # with ui.HStack():
+                            #     tooltip = "The length of time, in seconds, before a frame that has not been updated is considered 'dead'"
+                            #     ui.Label("Frame Timeout:", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
+                            #     self._ui_frame_timeout = ui.IntDrag(height=LABEL_HEIGHT, min=1, max=60, alignment=ui.Alignment.LEFT_CENTER, 
+                            #                                         tooltip="Seconds").model
+                            #     self._ui_frame_timeout.set_value(15)
+                            #     ui.Spacer(width=5)
+                            #     add_line_rect_flourish()
 
                             # reset tf
                             with ui.HStack():
@@ -382,6 +392,17 @@ class Extension(omni.ext.IExt):
                                 ui.Label("Rotation (degrees):", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT_CENTER, tooltip=tooltip)
                                 self._ui_label_rotation = ui.Label("-", width=LABEL_WIDTH, alignment=ui.Alignment.LEFT)
                                 add_line_rect_flourish()
+
+                            # clear
+                            with ui.HStack():
+                                btn = ui.Button("Clear",
+                                                width=LABEL_WIDTH / 2,
+                                                clicked_fn=self._on_clear_measurement,
+                                                style=get_style(),
+                                                alignment=ui.Alignment.LEFT_CENTER,
+                                                tooltip="Clear measurement and set frames to default")
+                                ui.Spacer(width=5)
+                                add_line_rect_flourish(True)
 
             # window event
             self._window.set_visibility_changed_fn(self._on_window)
