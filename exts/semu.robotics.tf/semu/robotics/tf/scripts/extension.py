@@ -33,7 +33,7 @@ class Extension(omni.ext.IExt):
         # menu item
         self._editor_menu = omni.kit.ui.get_editor_menu()
         if self._editor_menu:
-            self._menu = self._editor_menu.add_item(Extension.MENU_PATH, self._menu_callback, toggle=True, value=False)
+            self._menu = self._editor_menu.add_item(Extension.MENU_PATH, self._menu_callback)  #, toggle=True, value=False)
 
         self._viewport_window = get_active_viewport_window()
         self._viewport_scene = ViewportScene(self._viewport_window, ext_id)
