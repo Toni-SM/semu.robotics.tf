@@ -26,6 +26,10 @@ class Extension(omni.ext.IExt):
         self._settings = carb.settings.get_settings()
         self._ext_manager = omni.kit.app.get_app().get_extension_manager()
 
+        # shutdown stream
+        self.shutdown_stream_event = omni.kit.app.get_app().get_shutdown_event_stream() \
+            .create_subscription_to_pop(self._on_shutdown_event, name=str(ext_id), order=0)
+
         # menu item
         self._editor_menu = omni.kit.ui.get_editor_menu()
         if self._editor_menu:
@@ -51,6 +55,10 @@ class Extension(omni.ext.IExt):
             self._viewport_scene.manipulator.clear()
             self._viewport_scene.destroy()
             self._viewport_scene = None
+        # destroy window
+        if self._window:
+            self._window.destroy()
+            self._window = None
         # clean up menu item
         if self._menu is not None:
             try:
@@ -58,6 +66,11 @@ class Extension(omni.ext.IExt):
             except:
                 self._editor_menu.remove_item(Extension.MENU_PATH)
             self._menu = None
+        self.shutdown_stream_event = None
+
+    def _on_shutdown_event(self, event):
+        if event.type == omni.kit.app.POST_QUIT_EVENT_TYPE:
+            self.on_shutdown()
 
     def _menu_callback(self, *args, **kwargs):
         # stage units
@@ -194,9 +207,7 @@ class Extension(omni.ext.IExt):
     def _build_ui(self):
         if not self._window:
             self._window = ui.Window(title=Extension.WINDOW_NAME, 
-                                     width=0, 
-                                     height=0, 
-                                     visible=False, 
+                                     visible=False,
                                      dockPreference=ui.DockPreference.LEFT_BOTTOM)
 
             with self._window.frame:
