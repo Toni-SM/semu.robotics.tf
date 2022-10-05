@@ -8,7 +8,7 @@ This extension displays in the viewpot window the tf transformation tree. As rel
 
 **Supported OS:** Linux
 
-**Changelog:** [CHANGELOG.md](src/semu.robotics.tf/docs/CHANGELOG.md)
+**Changelog:** [CHANGELOG.md](exts/semu.robotics.tf/docs/CHANGELOG.md)
 
 **Table of Contents:**
 
@@ -50,7 +50,7 @@ This extension displays in the viewpot window the tf transformation tree. As rel
 <a name="usage"></a>
 ### Extension usage
 
-Activating the window (*Window > Robotics > TF Viewer*) will start the TF visualization, if the transformations are available. The extension is compatible with both versions of ROS (ROS1 and ROS2) and will work automatically with the currently active version (`omni.isaac.ros_bridge` or `omni.isaac.ros2_bridge`).
+Activating the window (*Window > Robotics > TF Viewer*) will start the TF visualization, if the transformations are available. The extension is compatible with both versions of ROS (ROS and ROS2) and will work automatically with the currently active version (`omni.isaac.ros_bridge` or `omni.isaac.ros2_bridge`).
 
 Deactivating (closing) the window will clear the TF visualization.
 
