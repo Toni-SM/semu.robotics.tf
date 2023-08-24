@@ -1,7 +1,9 @@
 #include <iostream>
 #include <math.h>
+#include <thread>
 
-#include "ros/ros.h"
+#include <ros/ros.h>
+#include <ros/console.h>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
@@ -29,34 +31,37 @@ class RosTfListener{
     private:
         tf2_ros::Buffer *m_tfBuffer = NULL;
         tf2_ros::TransformListener *m_tfTransformListener = NULL;
+
         std::string m_rootFrameName = "world";
-        std::vector<Frame> m_frames;
         std::vector<std::string> m_frameNames;
+        std::vector<Frame> m_frames;
+
+        std::thread m_thread;
+        bool m_stop = true;
+        void _run();
 
         Frame getFrame(const std::string&);
+        void computeTransforms();
 
     public:
         RosTfListener(int, char**);
         ~RosTfListener();
 
-        void reset();
+        void start();
+        void stop();
+        void resetBuffer();
         void showFrame(const Frame&);
-        void computeTransforms();
         
         std::vector<Frame> getFrames();
         std::vector<std::string> getFrameNames(const bool&);
+        Frame getTransform(const std::string&, const std::string&);
 
         void setRootFrameName(const std::string&);
         
 };
 
 RosTfListener::RosTfListener(int argc=0, char **argv=NULL){
-    ros::init(argc, argv, "SemuRoboticsRosTfListener");
-    ros::NodeHandle node;
 
-    m_tfBuffer = new tf2_ros::Buffer();
-    m_tfTransformListener = new tf2_ros::TransformListener(*m_tfBuffer);
-    // ros::Duration(1.0).sleep();
 }
 
 RosTfListener::~RosTfListener(){
@@ -69,6 +74,8 @@ RosTfListener::~RosTfListener(){
 
     // ros::shutdown();
 }
+
+// private methods
 
 Frame RosTfListener::getFrame(const std::string& name){
     Frame frame;
@@ -95,16 +102,55 @@ Frame RosTfListener::getFrame(const std::string& name){
     return frame;
 }
 
-void RosTfListener::reset(){
-    m_tfBuffer->clear();
-}
-
 void RosTfListener::computeTransforms(){
     std::vector<Frame> frames;
     for(const auto& name : getFrameNames(true)){
         frames.push_back(getFrame(name));
     }
     m_frames = frames;
+}
+
+void RosTfListener::_run(){
+    ROS_DEBUG("[RosTfListener._run] Initializing ROS node");
+    int argc = 0;
+    ros::init(argc, NULL, "SemuRoboticsRosTfListener");
+    ros::NodeHandle node;
+
+    ROS_DEBUG("[RosTfListener._run] Create tf2 buffer and listener");
+    m_tfBuffer = new tf2_ros::Buffer();
+    m_tfTransformListener = new tf2_ros::TransformListener(*m_tfBuffer);
+    ros::Duration duration(0.01);
+
+    ROS_DEBUG("[RosTfListener._run] Start computation loop");
+    while(!m_stop && ros::ok()){
+        computeTransforms();
+        duration.sleep();
+    }
+    ROS_DEBUG("[RosTfListener._run] Leave thread");
+}
+
+// public methods
+
+void RosTfListener::start(){
+    ROS_DEBUG("[RosTfListener.start] Starting thread..");
+    m_stop = false;
+    m_thread = std::thread(&RosTfListener::_run, this);
+}
+
+void RosTfListener::stop(){
+    ROS_DEBUG("[RosTfListener.stop] Stopping thread..");
+    m_stop = true;
+    // wait for the thread to finish and join
+    if(m_thread.joinable()){
+        ROS_DEBUG("[RosTfListener.stop] Joining thread..");
+        m_thread.join();
+        ROS_DEBUG("[RosTfListener.stop] Thread joined");
+    }
+    ROS_DEBUG("[RosTfListener.stop] Stopped thread");
+}
+
+void RosTfListener::resetBuffer(){
+    m_tfBuffer->clear();
 }
 
 void RosTfListener::showFrame(const Frame& frame){
@@ -124,6 +170,27 @@ std::vector<std::string> RosTfListener::getFrameNames(const bool& refresh=true){
         m_tfBuffer->_getFrameStrings(m_frameNames);
     }
     return m_frameNames;
+}
+
+Frame RosTfListener::getTransform(const std::string& targetFrame, const std::string& sourceFrame){
+    Frame frame;
+    // transform
+    try{
+        geometry_msgs::TransformStamped transform = m_tfBuffer->lookupTransform(targetFrame, sourceFrame, ros::Time(0));
+        frame.translation.x = transform.transform.translation.x;
+        frame.translation.y = transform.transform.translation.y;
+        frame.translation.z = transform.transform.translation.z;
+        frame.rotation.x = transform.transform.rotation.x;
+        frame.rotation.y = transform.transform.rotation.y;
+        frame.rotation.z = transform.transform.rotation.z;
+        frame.rotation.w = transform.transform.rotation.w;
+    } catch(const std::exception& e){
+        frame.name = e.what();
+        frame.parentName = e.what();
+        frame.translation = {NAN, NAN, NAN};
+        frame.rotation = {NAN, NAN, NAN, NAN};
+    }
+    return frame;
 }
 
 void RosTfListener::setRootFrameName(const std::string& frameName){
