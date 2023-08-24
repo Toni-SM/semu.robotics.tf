@@ -25,6 +25,7 @@ class Extension(omni.ext.IExt):
         # get extension settings and manager
         self._settings = carb.settings.get_settings()
         self._ext_manager = omni.kit.app.get_app().get_extension_manager()
+        self._extension_path = omni.kit.app.get_app().get_extension_manager().get_extension_path(ext_id)
 
         # shutdown stream
         self.shutdown_stream_event = omni.kit.app.get_app().get_shutdown_event_stream() \
@@ -124,7 +125,7 @@ class Extension(omni.ext.IExt):
                 carb.log_info("Acquiring TF listener ({})...".format(version.upper()))
                 # acquire listener
                 if version == "ros":
-                    self._tf_listener = _ros_tf_listener.acquire_tf_listener_interface(use_tf2=True)
+                    self._tf_listener = _ros_tf_listener.acquire_tf_listener_interface(self._extension_path)
                 elif version == "ros2":
                     self._tf_listener = _ros2_tf_listener.acquire_tf_listener_interface()
                 # update thread
